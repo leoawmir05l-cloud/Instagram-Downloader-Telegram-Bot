@@ -211,6 +211,8 @@ async def _thumbnail(video: Path, directory: Path) -> Path | None:
             str(video),
             "-frames:v",
             "1",
+            "-vf",
+            "scale=320:320:force_original_aspect_ratio=decrease",
             "-q:v",
             "3",
             str(destination),
@@ -247,10 +249,11 @@ async def send_bundle(message: Any, bundle: DownloadBundle, downloader: MediaDow
                     [[InlineKeyboardButton("➕ افزودن به گروه", url=f"https://t.me/{settings.bot_username}?startgroup=true")]]
                 )
                 if thumbnail:
-                    with thumbnail.open("rb") as thumb:
-                        await message.reply_video(
+                    with thumbnail.open("rb") as thumb, thumbnail.open("rb") as cover:
+                        sent_video = await message.reply_video(
                             video=InputFile(video, filename=item.path.name),
                             thumbnail=InputFile(thumb, filename=thumbnail.name),
+                            cover=InputFile(cover, filename=thumbnail.name),
                             caption=CAPTION,
                             supports_streaming=True,
                             width=int(video_stream.get("width") or 0) or None,
@@ -260,7 +263,7 @@ async def send_bundle(message: Any, bundle: DownloadBundle, downloader: MediaDow
                             reply_parameters=reply,
                         )
                 else:
-                    await message.reply_video(
+                    sent_video = await message.reply_video(
                         video=InputFile(video, filename=item.path.name),
                         caption=CAPTION,
                         supports_streaming=True,
@@ -270,6 +273,19 @@ async def send_bundle(message: Any, bundle: DownloadBundle, downloader: MediaDow
                         reply_markup=video_markup,
                         reply_parameters=reply,
                     )
+                sent_media = getattr(sent_video, "video", None)
+                logger.info(
+                    "Telegram video delivered message_id=%s file_id=%s mime_type=%s "
+                    "width=%s height=%s duration=%s thumbnail=%s cover=%s",
+                    getattr(sent_video, "message_id", None),
+                    getattr(sent_media, "file_id", None),
+                    getattr(sent_media, "mime_type", None),
+                    getattr(sent_media, "width", None),
+                    getattr(sent_media, "height", None),
+                    getattr(sent_media, "duration", None),
+                    bool(getattr(sent_media, "thumbnail", None)),
+                    bool(getattr(sent_media, "cover", None)),
+                )
 
 
 async def process_download(update: Update, context: ContextTypes.DEFAULT_TYPE, url: str) -> None:

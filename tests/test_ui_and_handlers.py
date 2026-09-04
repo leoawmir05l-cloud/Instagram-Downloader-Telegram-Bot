@@ -1,6 +1,9 @@
+import asyncio
+import subprocess
+
 from telegram import ReplyParameters
 
-from telegram_bot.handlers import source_reply
+from telegram_bot.handlers import _thumbnail, source_reply
 from telegram_bot.telegram_ui import (
     CB_ABOUT,
     CB_ADD_GROUP,
@@ -52,3 +55,34 @@ def test_required_channel_menu_has_three_dedicated_add_methods():
         if button.callback_data
     }
     assert {CB_ADMIN_ADD_CHANNEL_ID, CB_ADMIN_ADD_CHANNEL_LINK, CB_ADMIN_ADD_CHANNEL_USERNAME} <= callback_values
+
+
+def test_video_thumbnail_is_small_enough_for_telegram(tmp_path):
+    video = tmp_path / "video.mp4"
+    result = subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=size=1080x1920:rate=10:duration=0.5",
+            "-pix_fmt",
+            "yuv420p",
+            str(video),
+        ],
+        capture_output=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        return
+    thumbnail = asyncio.run(_thumbnail(video, tmp_path))
+    assert thumbnail is not None
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "stream=width,height", "-of", "json", str(thumbnail)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert '"width": 180' in probe.stdout
+    assert '"height": 320' in probe.stdout
