@@ -1,0 +1,620 @@
+REAL-WORLD TEST FAILURES FOUND.
+
+The bot is running, but the following real-world cases are still broken.
+
+Do NOT make cosmetic changes.
+
+Trace each failure to the real extraction/download/encoding/sending stage and fix the root cause.
+
+Do NOT remove or break anything that is already working.
+
+============================================================
+
+1. REAL INSTAGRAM PHOTO #1 — MUST WORK
+    ============================================================
+
+Test this exact public Instagram URL:
+
+https://instagram.com/p/DMh90yONEBP?igsi=MWN6Y2Q2dzI5dWMw&img_index=4
+
+This URL currently does NOT download.
+
+The bot must:
+
+1. detect the Instagram URL
+2. identify the media as PHOTO
+3. obtain the actual image source
+4. download the image
+5. validate the image
+6. send it as Telegram Photo
+7. send the original/high-quality image as Document
+8. add:
+
+📥 Downloaded by @inestaMardom_bot
+
+9. reply both messages to the ORIGINAL Instagram URL message
+
+The img_index=4 query parameter must not cause incorrect URL parsing or media selection.
+
+============================================================
+2. REAL INSTAGRAM PHOTO #2 — MUST WORK
+
+Test this exact URL:
+
+https://www.instagram.com/p/DL33Sfbqg70/?igsi=MW96aGxnYjlzNmZvaA==
+
+This also currently does NOT download.
+
+Fix the actual Photo extraction path.
+
+Do not simply special-case this URL.
+
+The implementation must work for the general class of public Instagram Photo posts.
+
+============================================================
+3. IMAGE-ONLY CAROUSEL
+
+Instagram image-only Carousels must work.
+
+Do NOT rely exclusively on yt-dlp producing video formats.
+
+Current yt-dlp versions can detect some Instagram image-only carousels but may return entries without usable video formats.
+
+Therefore:
+
+PHOTO entries must be processed as PHOTO.
+
+Do NOT reject an entry because:
+
+* no video formats
+* no video URL
+* no requested video format
+* extension is missing from CDN URL
+
+If metadata provides an actual image source, use it.
+
+If yt-dlp’s normal Instagram extraction cannot expose the image because of an image-only carousel limitation, implement a robust fallback based on actual Instagram page/media metadata.
+
+Do NOT invent URLs.
+
+Do NOT use random web scraping.
+
+Do NOT use image search.
+
+The fallback must identify real media belonging to the requested Instagram post.
+
+============================================================
+4. PHOTO CDN URL WITHOUT EXTENSION
+
+Instagram CDN image URLs may not contain .jpg or another extension.
+
+Do NOT determine whether something is an image solely from the URL extension.
+
+Use:
+
+* yt-dlp metadata
+* MIME type
+* Content-Type
+* actual downloaded bytes
+* image decoder validation
+
+If metadata says ext=jpg but the URL has no .jpg, it is still a valid image.
+
+============================================================
+5. CAROUSEL ORDER
+
+For every Carousel:
+
+preserve Instagram order exactly.
+
+Use entry index.
+
+Never sort filenames.
+
+Never rely on filesystem ordering.
+
+Never reorder based on extension.
+
+============================================================
+6. REAL REEL #3 — VIDEO IS CORRUPTED
+
+Test this exact Reel:
+
+https://www.instagram.com/reel/DZqbdWjxgGc/?igsi=MXB1cXIzMzlxdHNodg==
+
+Current behavior:
+
+* From outside Telegram, the downloaded file appears broken / has no usable video image.
+* Inside Telegram, the video dimensions are incorrect.
+* Audio continues playing but the video image remains frozen.
+* Audio quality is also low.
+
+This indicates a real video/container/codec/timestamp/stream-selection problem.
+
+Do NOT just change the Telegram thumbnail.
+
+The FINAL VIDEO FILE ITSELF must be valid.
+
+============================================================
+7. DEBUG THE CORRUPTED VIDEO
+
+For this Reel, inspect the original downloaded media with FFprobe BEFORE any conversion.
+
+Log:
+
+* container format
+* duration
+* video codec
+* audio codec
+* width
+* height
+* pixel format
+* FPS
+* time base
+* video stream start time
+* audio stream start time
+* number of video frames
+* number of audio frames
+* bitrate where available
+
+Then inspect the FINAL output with FFprobe again.
+
+Compare:
+
+SOURCE
+vs
+FINAL
+
+Do not hide FFmpeg errors.
+
+Never log secrets.
+
+============================================================
+8. VIDEO STREAM SELECTION
+
+Select the highest practical video quality.
+
+Prefer:
+
+bestvideo + bestaudio
+
+when separate streams exist.
+
+Do not accidentally select:
+
+* thumbnail
+* image stream
+* low-quality preview
+* audio-only stream
+* broken progressive stream
+
+Explicitly verify the selected format contains a REAL video stream.
+
+============================================================
+9. AUDIO STREAM SELECTION
+
+Select the highest-quality available audio stream.
+
+Do NOT force:
+
+128 kbps
+
+Do NOT unnecessarily convert good source audio.
+
+If source audio is already compatible with the final container, preserve it.
+
+The final video should retain the best practical source audio.
+
+============================================================
+10. VIDEO MERGE
+
+If video and audio are separate:
+
+download them separately and merge correctly with FFmpeg.
+
+Do NOT blindly re-encode if remuxing is sufficient.
+
+If codecs/container/timestamps require re-encoding, re-encode only when necessary.
+
+The final file must have synchronized:
+
+VIDEO + AUDIO
+
+============================================================
+11. VIDEO CODEC COMPATIBILITY
+
+Before sending as Telegram Video, ensure the final file is actually compatible.
+
+Prefer:
+
+MP4
+H.264 video
+AAC audio
+YUV420P
+
+Do not create a file where:
+
+audio works
+but video frames are corrupted/frozen.
+
+If the source codec is already compatible, prefer remux.
+
+If not compatible, perform a proper conversion.
+
+============================================================
+12. VIDEO TIMESTAMPS
+
+The frozen-video/audio-only-progress symptom can indicate timestamp/stream problems.
+
+Inspect:
+
+PTS
+DTS
+time base
+start time
+duration
+
+Do not create invalid timestamps.
+
+If necessary, use appropriate FFmpeg timestamp handling.
+
+After processing, run FFprobe again and verify the video stream contains valid frames throughout the duration.
+
+============================================================
+13. VIDEO DIMENSIONS
+
+The Telegram video dimensions must match the FINAL actual video.
+
+Do not use dimensions from:
+
+* Instagram metadata that belongs to another media
+* thumbnail
+* stale metadata
+* original stream after transcoding
+
+Read the final width/height using FFprobe.
+
+Then pass those dimensions when sending Telegram Video.
+
+============================================================
+14. VIDEO FRAME VALIDATION
+
+Before Telegram upload, perform a real validation.
+
+Verify:
+
+* first usable frame
+* middle frame
+* later frame
+
+can all be decoded.
+
+Do not only check:
+
+file exists
+or
+file size > 0.
+
+A corrupt MP4 can have a non-zero file size.
+
+The video must contain decodable frames.
+
+============================================================
+15. VIDEO THUMBNAIL
+
+Generate the Telegram thumbnail from the FINAL validated video.
+
+Do not use an unrelated Instagram thumbnail.
+
+Do not use a broken frame.
+
+Select a frame that actually contains video content.
+
+The thumbnail is only for Telegram display.
+
+It must NOT be used as a substitute for fixing the actual video.
+
+============================================================
+16. TELEGRAM VIDEO SEND
+
+Send the final validated MP4 as Video.
+
+Use:
+
+supports_streaming=True
+
+when appropriate.
+
+Use the FINAL FFprobe dimensions.
+
+Use the generated thumbnail.
+
+Use the required caption:
+
+📥 Downloaded by @inestaMardom_bot
+
+Use:
+
+reply_parameters
+
+so the video replies to the ORIGINAL Instagram URL message.
+
+============================================================
+17. ADD TO GROUP BUTTON
+
+Every successfully downloaded video must have an Inline/Glass button underneath:
+
+➕ افزودن به گروه
+
+This button must actually work.
+
+It must open the real Telegram Add-to-Group flow.
+
+Do not make it decorative.
+
+Do not attach it only to some media types.
+
+Verify it appears under:
+
+* Reel
+* Video
+* Carousel Video
+
+============================================================
+18. REQUIRED CHANNEL — THREE SEPARATE METHODS
+
+The Admin Required Channel section must have THREE dedicated add methods.
+
+Do NOT combine them into one ambiguous input.
+
+Buttons:
+
+🆔 افزودن با Chat ID
+🔗 افزودن با لینک خصوصی
+👤 افزودن با Username
+
+Each button opens its own input flow.
+
+⸻
+
+A. CHAT ID
+
+Admin chooses:
+
+🆔 افزودن با Chat ID
+
+then enters:
+
+-1001234567890
+
+Bot validates it and obtains available channel information using Telegram API.
+
+⸻
+
+B. PRIVATE INVITE LINK
+
+Admin chooses:
+
+🔗 افزودن با لینک خصوصی
+
+then enters:
+
+https://t.me/+xxxxxxxx
+
+Store the Join URL.
+
+Do not require the admin to enter the Chat ID at the same time.
+
+If Telegram Bot API cannot resolve the private invite URL into a Chat ID, do not pretend it can.
+
+Store the invite URL and explain the exact limitation internally.
+
+⸻
+
+C. PUBLIC USERNAME
+
+Admin chooses:
+
+👤 افزودن با Username
+
+then enters:
+
+@channelname
+
+Use Telegram API to resolve and validate it.
+
+============================================================
+19. REQUIRED CHANNEL UI
+
+When a user is not a member:
+
+🔒 برای استفاده از ربات ابتدا در کانال‌های زیر عضو شوید:
+
+For each channel:
+
+📢 عضویت در کانال
+
+Then:
+
+✅ عضو شدم
+
+The Join button must use the stored correct URL.
+
+The عضو شدم button must perform REAL membership verification using:
+
+get_chat_member
+
+where Telegram permits it.
+
+============================================================
+20. PERSONAL STATISTICS UI
+
+The existing statistics function works.
+
+Do NOT change its logic.
+
+Only improve the presentation with tasteful emojis.
+
+Example:
+
+📊 آمار من
+
+📥 کل دانلودها: …
+✅ موفق: …
+❌ ناموفق: …
+
+🖼️ عکس‌ها: …
+🎬 ویدئوها: …
+🎞️ ریلزها: …
+🖼️🎬 آیتم‌های Carousel: …
+
+Do NOT show global bot statistics to normal users.
+
+============================================================
+21. PRESERVE WORKING FEATURES
+
+DO NOT BREAK:
+
+* /start
+* personal statistics
+* bottom Reply Keyboard
+* Inline buttons
+* Admin authorization
+* Admin Panel
+* Admin navigation
+* Required Channels
+* Ban/Unban
+* Broadcast
+* SQLite
+* Group auto-download
+* Private Chat downloads
+* Caption URL detection
+* Reply/Quoted URL detection
+* original-message reply
+* Downloaded-by caption
+* video downloads that already work
+
+============================================================
+22. TEST THE ACTUAL FAILURES
+
+After implementation, test the exact three real URLs:
+
+PHOTO 1:
+https://instagram.com/p/DMh90yONEBP?igsi=MWN6Y2Q2dzI5dWMw&img_index=4
+
+PHOTO 2:
+https://www.instagram.com/p/DL33Sfbqg70/?igsi=MW96aGxnYjlzNmZvaA==
+
+REEL:
+https://www.instagram.com/reel/DZqbdWjxgGc/?igsi=MXB1cXIzMzlxdHNodg==
+
+Do NOT report success based only on unit tests.
+
+============================================================
+23. PHOTO REAL-WORLD TEST
+
+For both Photo URLs verify:
+
+URL detected
+→ extraction
+→ media classification = PHOTO
+→ image source found
+→ image downloaded
+→ image validated
+→ Telegram Photo sent
+→ original Document sent
+→ caption present
+→ reply_parameters point to original URL message
+
+============================================================
+24. REEL REAL-WORLD TEST
+
+For the Reel verify:
+
+URL detected
+→ video format selected
+→ audio format selected
+→ download
+→ merge/remux/transcode
+→ FFprobe validation
+→ frame validation
+→ correct dimensions
+→ correct duration
+→ audio/video synchronization
+→ Telegram Video upload
+→ thumbnail
+→ caption
+→ Add-to-Group button
+→ reply to original URL message
+
+============================================================
+25. CALLBACK TESTS
+
+Test every Inline button.
+
+Especially:
+
+➕ افزودن به گروه
+
+Verify:
+
+button appears
+→ callback/URL works
+→ Telegram Add-to-Group flow opens
+
+Also verify:
+
+⬅️ برگشت
+
+============================================================
+26. REQUIRED CHANNEL TESTS
+
+Actually test the three dedicated flows:
+
+🆔 افزودن با Chat ID
+🔗 افزودن با لینک خصوصی
+👤 افزودن با Username
+
+Then test:
+
+📋 کانال‌های اجباری
+🗑️ حذف کانال
+⬅️ برگشت
+
+============================================================
+27. NO FAKE SUCCESS
+
+Do NOT say:
+
+“Fixed”
+
+if the real URLs were not tested.
+
+If the environment cannot access Instagram, state that clearly.
+
+Still run all local tests and provide the exact reason the real-world test could not be executed.
+
+============================================================
+28. FINAL ACCEPTANCE CRITERIA
+
+The implementation is accepted only when:
+
+✅ Both provided Instagram Photo URLs are handled by the Photo pipeline
+✅ Image-only Carousel entries are supported
+✅ CDN URLs without extensions are supported
+✅ Photos are sent as Photo + original Document
+✅ Carousel order is exact
+✅ Reel produces a genuinely playable video
+✅ Video frames are not frozen
+✅ Audio and video are synchronized
+✅ Video dimensions are correct
+✅ Audio quality is not unnecessarily degraded
+✅ Final video passes FFprobe/frame validation
+✅ Reel has ➕ افزودن به گروه
+✅ Required Channel has three dedicated add methods
+✅ Membership uses real get_chat_member verification
+✅ Statistics have improved emoji presentation
+✅ Existing working features remain intact
+✅ No fake test results are reported
+
+Do the implementation, run the tests, inspect failures, and FIX failures before reporting completion.
