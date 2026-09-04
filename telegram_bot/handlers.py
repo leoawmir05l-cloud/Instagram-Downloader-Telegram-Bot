@@ -31,6 +31,9 @@ from .telegram_ui import (
     CB_ADD_GROUP,
     CB_ADMIN,
     CB_ADMIN_ADD_CHANNEL,
+    CB_ADMIN_ADD_CHANNEL_ID,
+    CB_ADMIN_ADD_CHANNEL_LINK,
+    CB_ADMIN_ADD_CHANNEL_USERNAME,
     CB_ADMIN_BACK,
     CB_ADMIN_BROADCAST,
     CB_ADMIN_CHANNELS,
@@ -148,13 +151,13 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 def stats_text(stats: dict[str, Any]) -> str:
     return (
         "📊 آمار من\n\n"
-        f"دانلودها: {stats['downloads']}\n"
-        f"موفق: {stats['successful']}\n"
-        f"ناموفق: {stats['failed']}\n"
-        f"عکس‌ها: {stats['photos']}\n"
-        f"ویدئوها: {stats['videos']}\n"
-        f"Reelها: {stats['reels']}\n"
-        f"آیتم‌های Carousel: {stats['carousel_items']}"
+        f"📥 کل دانلودها: {stats['downloads']}\n"
+        f"✅ موفق: {stats['successful']}\n"
+        f"❌ ناموفق: {stats['failed']}\n\n"
+        f"🖼️ عکس‌ها: {stats['photos']}\n"
+        f"🎬 ویدئوها: {stats['videos']}\n"
+        f"🎞️ ریلزها: {stats['reels']}\n"
+        f"🖼️🎬 آیتم‌های Carousel: {stats['carousel_items']}"
     )
 
 
@@ -189,25 +192,36 @@ async def check_user_access(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 async def _thumbnail(video: Path, directory: Path) -> Path | None:
-    destination = directory / f"{video.stem}.jpg"
-    command = [
-        "ffmpeg",
-        "-y",
-        "-ss",
-        "1",
-        "-i",
-        str(video),
-        "-frames:v",
-        "1",
-        "-q:v",
-        "3",
-        str(destination),
-    ]
-    result = await asyncio.to_thread(subprocess.run, command, capture_output=True, text=True, timeout=30)
-    return destination if result.returncode == 0 and destination.exists() else None
+    from .downloader import probe_video
+
+    try:
+        metadata = probe_video(video)
+        duration = float((metadata.get("format") or {}).get("duration") or 0)
+    except (DownloadError, ValueError, TypeError):
+        duration = 0
+    sample_times = [max(duration * ratio, 0.05) for ratio in (0.1, 0.5, 0.9)] if duration else [1.0]
+    for attempt, timestamp in enumerate(sample_times):
+        destination = directory / f"{video.stem}_{attempt}.jpg"
+        command = [
+            "ffmpeg",
+            "-y",
+            "-ss",
+            f"{timestamp:.3f}",
+            "-i",
+            str(video),
+            "-frames:v",
+            "1",
+            "-q:v",
+            "3",
+            str(destination),
+        ]
+        result = await asyncio.to_thread(subprocess.run, command, capture_output=True, text=True, timeout=30)
+        if result.returncode == 0 and destination.exists() and destination.stat().st_size > 0:
+            return destination
+    return None
 
 
-async def send_bundle(message: Any, bundle: DownloadBundle, downloader: MediaDownloader) -> None:
+async def send_bundle(message: Any, bundle: DownloadBundle, downloader: MediaDownloader, settings: Settings) -> None:
     for item in sorted(bundle.items, key=lambda media: media.index):
         reply = source_reply(message)
         if item.media_type == MediaType.PHOTO:
@@ -222,8 +236,16 @@ async def send_bundle(message: Any, bundle: DownloadBundle, downloader: MediaDow
             with item.path.open("rb") as document:
                 await message.reply_document(document=InputFile(document, filename=item.path.name), caption=CAPTION, reply_parameters=reply)
         else:
+            from .downloader import probe_video
+
+            metadata = probe_video(item.path)
+            video_stream = next(stream for stream in metadata["streams"] if stream.get("codec_type") == "video")
+            duration = float((metadata.get("format") or {}).get("duration") or 0)
             thumbnail = await _thumbnail(item.path, bundle.job_directory)
             with item.path.open("rb") as video:
+                video_markup = InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("➕ افزودن به گروه", url=f"https://t.me/{settings.bot_username}?startgroup=true")]]
+                )
                 if thumbnail:
                     with thumbnail.open("rb") as thumb:
                         await message.reply_video(
@@ -231,6 +253,10 @@ async def send_bundle(message: Any, bundle: DownloadBundle, downloader: MediaDow
                             thumbnail=InputFile(thumb, filename=thumbnail.name),
                             caption=CAPTION,
                             supports_streaming=True,
+                            width=int(video_stream.get("width") or 0) or None,
+                            height=int(video_stream.get("height") or 0) or None,
+                            duration=max(1, round(duration)) if duration else None,
+                            reply_markup=video_markup,
                             reply_parameters=reply,
                         )
                 else:
@@ -238,6 +264,10 @@ async def send_bundle(message: Any, bundle: DownloadBundle, downloader: MediaDow
                         video=InputFile(video, filename=item.path.name),
                         caption=CAPTION,
                         supports_streaming=True,
+                        width=int(video_stream.get("width") or 0) or None,
+                        height=int(video_stream.get("height") or 0) or None,
+                        duration=max(1, round(duration)) if duration else None,
+                        reply_markup=video_markup,
                         reply_parameters=reply,
                     )
 
@@ -260,7 +290,7 @@ async def process_download(update: Update, context: ContextTypes.DEFAULT_TYPE, u
         await status.edit_text("⏳ در حال دانلود…")
         bundle = await downloader.download(url, extracted)
         await status.edit_text("📤 در حال ارسال…")
-        await send_bundle(message, bundle, downloader)
+        await send_bundle(message, bundle, downloader, settings)
         db.record_download_result(
             download_id,
             user_id,
@@ -412,7 +442,16 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
     elif data == CB_ADMIN_ADD_CHANNEL:
         context.user_data["admin_state"] = "add_channel"
-        await query.edit_message_text("شناسه عددی، @username یا لینک دعوت خصوصی کانال را ارسال کن.", reply_markup=back_markup(CB_ADMIN_BACK))
+        await query.edit_message_text("یکی از روش‌های افزودن کانال را انتخاب کن.", reply_markup=required_menu())
+    elif data in {CB_ADMIN_ADD_CHANNEL_ID, CB_ADMIN_ADD_CHANNEL_LINK, CB_ADMIN_ADD_CHANNEL_USERNAME}:
+        state_by_callback = {
+            CB_ADMIN_ADD_CHANNEL_ID: ("add_channel_id", "شناسه عددی کانال را ارسال کن، مانند -1001234567890."),
+            CB_ADMIN_ADD_CHANNEL_LINK: ("add_channel_link", "لینک دعوت خصوصی کانال را ارسال کن، مانند https://t.me/+xxxxxxxx."),
+            CB_ADMIN_ADD_CHANNEL_USERNAME: ("add_channel_username", "یوزرنیم عمومی کانال را ارسال کن، مانند @channelname."),
+        }
+        state, prompt = state_by_callback[data]
+        context.user_data["admin_state"] = state
+        await query.edit_message_text(prompt, reply_markup=back_markup(CB_ADMIN_BACK))
     elif data == CB_ADMIN_REMOVE_CHANNEL:
         channels = db.list_required_channels()
         buttons = [[InlineKeyboardButton(f"🗑️ {c['title']}", callback_data=f"admin:remove:{c['id']}")] for c in channels]
@@ -482,14 +521,24 @@ async def complete_add_channel(update: Update, context: ContextTypes.DEFAULT_TYP
     db, _, _, _ = services(context)
     message = update.effective_message
     raw = (message.text or "").strip()
+    state = context.user_data.get("admin_state")
     if raw == "/cancel":
         context.user_data.pop("admin_state", None)
         await message.reply_text("لغو شد.")
         return
     context.user_data.pop("admin_state", None)
-    if raw.startswith(("https://t.me/+", "https://t.me/joinchat/")):
+    if state == "add_channel_link" and raw.startswith(("https://t.me/+", "https://t.me/joinchat/")):
         db.add_required_channel(None, None, "کانال خصوصی", raw)
         await message.reply_text("✅ لینک دعوت خصوصی ذخیره شد.")
+        return
+    if state == "add_channel_link":
+        await message.reply_text("⚠️ لینک خصوصی معتبر نیست. عملیات لغو شد.")
+        return
+    if state == "add_channel_id" and not re.fullmatch(r"-?\d+", raw):
+        await message.reply_text("⚠️ Chat ID باید عددی باشد. عملیات لغو شد.")
+        return
+    if state == "add_channel_username" and not re.fullmatch(r"@?[A-Za-z0-9_]{5,}", raw):
+        await message.reply_text("⚠️ Username عمومی معتبر نیست. عملیات لغو شد.")
         return
     try:
         chat = await context.bot.get_chat(int(raw) if re.fullmatch(r"-?\d+", raw) else raw.lstrip("@"))

@@ -1,1 +1,2 @@
 - [Telegram transport logging](telegram-security.md) — keep HTTP client logs above INFO because Bot API URLs contain the token.
+- [Instagram extraction fallback](instagram-extraction.md) — valid photo posts may need ordered media URLs from the official embed metadata.

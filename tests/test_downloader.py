@@ -3,7 +3,14 @@ import subprocess
 import pytest
 from PIL import Image
 
-from telegram_bot.downloader import DownloadError, MediaDownloader, probe_video, validate_image
+from telegram_bot.downloader import (
+    DownloadError,
+    MediaDownloader,
+    ensure_telegram_video,
+    probe_video,
+    validate_image,
+    validate_video_frames,
+)
 
 
 def test_image_validation_accepts_real_image(tmp_path):
@@ -47,6 +54,35 @@ def test_ffprobe_validates_a_generated_video(tmp_path):
         pytest.skip("ffmpeg could not generate a test video in this environment")
     metadata = probe_video(path)
     assert any(stream["codec_type"] == "video" for stream in metadata["streams"])
+    validate_video_frames(path, metadata)
+
+
+def test_incompatible_video_is_converted_to_telegram_compatible_mp4(tmp_path):
+    source = tmp_path / "source.webm"
+    result = subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=size=64x64:rate=10:duration=0.5",
+            "-c:v",
+            "libvpx-vp9",
+            str(source),
+        ],
+        capture_output=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        pytest.skip("ffmpeg could not generate an incompatible test video")
+    final = ensure_telegram_video(source, tmp_path, 0)
+    metadata = probe_video(final)
+    video = next(stream for stream in metadata["streams"] if stream["codec_type"] == "video")
+    assert final.suffix == ".mp4"
+    assert video["codec_name"] == "h264"
+    assert video["pix_fmt"].startswith("yuv420")
+    validate_video_frames(final, metadata)
 
 
 def test_telegram_photo_copy_preserves_readable_image(tmp_path):

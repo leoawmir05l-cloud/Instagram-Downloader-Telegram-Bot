@@ -47,6 +47,7 @@ def probe_video(path: Path) -> dict[str, Any]:
         "error",
         "-show_streams",
         "-show_format",
+        "-count_frames",
         "-of",
         "json",
         str(path),
@@ -61,6 +62,136 @@ def probe_video(path: Path) -> dict[str, Any]:
     if not any(stream.get("codec_type") == "video" for stream in payload.get("streams", [])):
         raise DownloadError("corrupted_media", "video stream is missing")
     return payload
+
+
+def _first_stream(metadata: dict[str, Any], codec_type: str) -> dict[str, Any] | None:
+    return next(
+        (stream for stream in metadata.get("streams", []) if stream.get("codec_type") == codec_type),
+        None,
+    )
+
+
+def _stream_summary(metadata: dict[str, Any]) -> dict[str, Any]:
+    video = _first_stream(metadata, "video") or {}
+    audio = _first_stream(metadata, "audio") or {}
+    return {
+        "container": (metadata.get("format") or {}).get("format_name"),
+        "duration": (metadata.get("format") or {}).get("duration"),
+        "video_codec": video.get("codec_name"),
+        "audio_codec": audio.get("codec_name"),
+        "width": video.get("width"),
+        "height": video.get("height"),
+        "pixel_format": video.get("pix_fmt"),
+        "fps": video.get("r_frame_rate"),
+        "time_base": video.get("time_base"),
+        "video_start": video.get("start_time"),
+        "audio_start": audio.get("start_time"),
+        "video_frames": video.get("nb_read_frames") or video.get("nb_frames"),
+        "audio_frames": audio.get("nb_read_frames") or audio.get("nb_frames"),
+        "video_bitrate": video.get("bit_rate"),
+        "audio_bitrate": audio.get("bit_rate"),
+    }
+
+
+def _log_video_probe(label: str, path: Path, metadata: dict[str, Any]) -> None:
+    logger.info("video %s file=%s probe=%s", label, path.name, _stream_summary(metadata))
+
+
+def validate_video_frames(path: Path, metadata: dict[str, Any] | None = None) -> None:
+    metadata = metadata or probe_video(path)
+    try:
+        duration = float((metadata.get("format") or {}).get("duration") or 0)
+    except (TypeError, ValueError):
+        duration = 0
+    if duration <= 0:
+        raise DownloadError("corrupted_media", "video duration is invalid")
+    sample_times = sorted({0.0, min(duration * 0.5, max(duration - 0.05, 0)), max(duration - 0.1, 0)})
+    for timestamp in sample_times:
+        command = [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-ss",
+            f"{timestamp:.3f}",
+            "-i",
+            str(path),
+            "-frames:v",
+            "1",
+            "-f",
+            "null",
+            "-",
+        ]
+        result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            raise DownloadError("corrupted_media", f"video frame failed at {timestamp:.3f}s: {result.stderr[-300:]}")
+
+
+def _is_telegram_compatible(metadata: dict[str, Any]) -> bool:
+    video = _first_stream(metadata, "video") or {}
+    audio = _first_stream(metadata, "audio")
+    format_name = str((metadata.get("format") or {}).get("format_name") or "")
+    return (
+        any(name in format_name.split(",") for name in ("mp4", "mov"))
+        and video.get("codec_name") == "h264"
+        and str(video.get("pix_fmt") or "").startswith(("yuv420", "yuvj420"))
+        and (audio is None or audio.get("codec_name") == "aac")
+        and int(video.get("nb_read_frames") or video.get("nb_frames") or 0) > 0
+    )
+
+
+def _transcode_for_telegram(source: Path, destination: Path) -> None:
+    command = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(source),
+        "-map",
+        "0:v:0",
+        "-map",
+        "0:a?",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "medium",
+        "-crf",
+        "18",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "256k",
+        "-af",
+        "aresample=async=1:first_pts=0",
+        "-avoid_negative_ts",
+        "make_zero",
+        "-movflags",
+        "+faststart",
+        "-map_metadata",
+        "0",
+        str(destination),
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, timeout=180)
+    if result.returncode != 0:
+        logger.error("FFmpeg compatibility conversion failed for %s: %s", source.name, result.stderr[-2000:])
+        raise DownloadError("ffmpeg_error", result.stderr[-500:])
+
+
+def ensure_telegram_video(path: Path, directory: Path, index: int) -> Path:
+    source_metadata = probe_video(path)
+    _log_video_probe("source", path, source_metadata)
+    if _is_telegram_compatible(source_metadata):
+        validate_video_frames(path, source_metadata)
+        _log_video_probe("final", path, source_metadata)
+        return path
+    destination = directory / f"validated_{index:04d}.mp4"
+    _transcode_for_telegram(path, destination)
+    final_metadata = probe_video(destination)
+    validate_video_frames(destination, final_metadata)
+    if not _is_telegram_compatible(final_metadata):
+        raise DownloadError("corrupted_media", "final video is not Telegram-compatible")
+    _log_video_probe("final", destination, final_metadata)
+    return destination
 
 
 def _newest_media_file(directory: Path, index: int) -> Path | None:
@@ -100,7 +231,7 @@ class MediaDownloader:
         if media_type == MediaType.VIDEO:
             options.update(
                 {
-                    "format": "bestvideo*+bestaudio/best",
+                    "format": "bestvideo+bestaudio/best",
                     "merge_output_format": "mp4",
                     "postprocessors": [{"key": "FFmpegVideoRemuxer", "preferedformat": "mp4"}],
                     "postprocessor_args": {"ffmpeg": ["-movflags", "+faststart"]},
@@ -152,8 +283,7 @@ class MediaDownloader:
                 asyncio.to_thread(self._download_with_ytdlp_sync, source_url, directory, index, MediaType.VIDEO),
                 timeout=self.timeout,
             )
-            probe_video(path)
-            return path
+            return ensure_telegram_video(path, directory, index)
         except DownloadError:
             raise
         except Exception as exc:

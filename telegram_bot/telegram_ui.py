@@ -18,6 +18,9 @@ CB_ADMIN_STATS = "admin:stats"
 CB_ADMIN_REQUIRED = "admin:required"
 CB_ADMIN_CHANNELS = "admin:channels"
 CB_ADMIN_PUBLIC_CHANNEL = "admin:public_channel"
+CB_ADMIN_ADD_CHANNEL_ID = "admin:add_channel_id"
+CB_ADMIN_ADD_CHANNEL_LINK = "admin:add_channel_link"
+CB_ADMIN_ADD_CHANNEL_USERNAME = "admin:add_channel_username"
 CB_ADMIN_ADD_CHANNEL = "admin:add_channel"
 CB_ADMIN_REMOVE_CHANNEL = "admin:remove_channel"
 CB_ADMIN_BROADCAST = "admin:broadcast"
@@ -75,7 +78,11 @@ def admin_menu() -> InlineKeyboardMarkup:
 def required_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("➕ افزودن کانال", callback_data=CB_ADMIN_ADD_CHANNEL)],
+            [
+                InlineKeyboardButton("🆔 افزودن با Chat ID", callback_data=CB_ADMIN_ADD_CHANNEL_ID),
+                InlineKeyboardButton("👤 افزودن با Username", callback_data=CB_ADMIN_ADD_CHANNEL_USERNAME),
+            ],
+            [InlineKeyboardButton("🔗 افزودن با لینک خصوصی", callback_data=CB_ADMIN_ADD_CHANNEL_LINK)],
             [InlineKeyboardButton("📋 کانال‌های اجباری", callback_data=CB_ADMIN_CHANNELS)],
             [InlineKeyboardButton("🗑️ حذف کانال", callback_data=CB_ADMIN_REMOVE_CHANNEL)],
             [InlineKeyboardButton("⬅️ برگشت", callback_data=CB_ADMIN_BACK)],

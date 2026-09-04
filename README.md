@@ -5,6 +5,7 @@ A production-oriented Python 3.12 Telegram long-polling bot for downloading publ
 ## Features
 
 - Public Instagram `p`, `reel`, `reels`, and `tv` URLs found anywhere in messages, captions, or quoted messages.
+- Official Instagram embed metadata fallback for valid photo-only posts and image-only carousels when yt-dlp exposes no video formats.
 - Photo extraction is independent from video extraction. A photo with no video stream is still a photo.
 - Mixed carousel items are downloaded and sent in exact Instagram order.
 - Each photo is sent both as a Telegram Photo and as the untouched original Document.

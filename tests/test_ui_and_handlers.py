@@ -8,7 +8,11 @@ from telegram_bot.telegram_ui import (
     CB_DOWNLOAD,
     CB_HELP,
     CB_STATS,
+    CB_ADMIN_ADD_CHANNEL_ID,
+    CB_ADMIN_ADD_CHANNEL_LINK,
+    CB_ADMIN_ADD_CHANNEL_USERNAME,
     inline_main_menu,
+    required_menu,
     reply_menu,
 )
 
@@ -38,3 +42,13 @@ def test_media_reply_points_to_exact_source_message():
     assert isinstance(params, ReplyParameters)
     assert params.message_id == 42
     assert params.allow_sending_without_reply is True
+
+
+def test_required_channel_menu_has_three_dedicated_add_methods():
+    callback_values = {
+        button.callback_data
+        for row in required_menu().inline_keyboard
+        for button in row
+        if button.callback_data
+    }
+    assert {CB_ADMIN_ADD_CHANNEL_ID, CB_ADMIN_ADD_CHANNEL_LINK, CB_ADMIN_ADD_CHANNEL_USERNAME} <= callback_values
