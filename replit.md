@@ -1,45 +1,51 @@
-# [Project name]
+# Instagram Downloader Telegram Bot
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Python Telegram bot that downloads public Instagram photos, videos, Reels, and mixed carousels with exact ordering and reply-to-source behavior.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `python main.py` — run the Telegram long-polling bot
+- `python -m pytest -q` — run the Python test suite
+- `python -m compileall -q telegram_bot tests` — syntax check
+- Required secret: `BOT_TOKEN`
+- Required environment value: `ADMIN_ID`
+- Optional environment values are documented in `README.md`.
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Python 3.12, python-telegram-bot 22.x, yt-dlp, FFmpeg/FFprobe, SQLite, asyncio, httpx, Pillow
+- The original pnpm workspace artifacts remain available but are not part of the bot runtime.
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `telegram_bot/bot.py` — application assembly and polling entry point
+- `telegram_bot/handlers.py` — user flows, media sending, callbacks, admin actions
+- `telegram_bot/downloader.py` — yt-dlp/HTTP photo download, FFmpeg/FFprobe validation, cleanup
+- `telegram_bot/media.py` — media classification and image-source selection
+- `telegram_bot/database.py` — SQLite schema and persistence
+- `tests/` — offline unit and integration-style tests
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Photos are classified and downloaded independently from videos; no video stream is required.
+- Carousel entry index is the ordering source of truth; media groups are intentionally not used.
+- Every media send uses Telegram `reply_parameters` pointing to the source message.
+- Each job receives an isolated temporary directory and is removed on success or failure.
+- Telegram transport logs are kept above INFO so bot tokens cannot appear in request URLs.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+Users send a public Instagram URL in a private chat or group and receive validated media in Persian, with personal download statistics and an admin panel for moderation, broadcasts, and required channels.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Build the complete specification from the beginning rather than leaving placeholder buttons or deferred core features.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Live Instagram and Telegram API tests are not part of the offline suite; they require public URLs and real Telegram chats.
+- Never enable `httpx` INFO logs because Telegram Bot API URLs include the bot token.
 
 ## Pointers
 
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- See `README.md` for configuration and operational details.

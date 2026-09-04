@@ -1,0 +1,7 @@
+python-telegram-bot==22.5
+yt-dlp
+httpx
+Pillow
+filetype
+pytest
+pytest-asyncio

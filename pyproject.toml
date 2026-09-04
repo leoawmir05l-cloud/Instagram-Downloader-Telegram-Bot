@@ -1,0 +1,18 @@
+[project]
+name = "instagram-downloader-telegram-bot"
+version = "0.1.0"
+description = "Production Telegram bot for downloading public Instagram media"
+requires-python = ">=3.12"
+dependencies = [
+    "filetype>=1.2.0",
+    "httpx>=0.28.1",
+    "pillow>=12.3.0",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "python-telegram-bot==22.5",
+    "yt-dlp>=2026.8.19",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

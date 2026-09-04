@@ -1,0 +1,1 @@
+- [Telegram transport logging](telegram-security.md) — keep HTTP client logs above INFO because Bot API URLs contain the token.
