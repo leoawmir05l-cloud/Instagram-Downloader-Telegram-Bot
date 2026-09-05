@@ -4,6 +4,7 @@ import asyncio
 import html
 import logging
 import re
+import time
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -41,16 +42,30 @@ class InstagramExtractor:
             return ydl.extract_info(url, download=False)
 
     async def extract(self, url: str) -> ExtractedMedia:
+        started = time.perf_counter()
         try:
             info = await asyncio.wait_for(asyncio.to_thread(self._extract_sync, url), timeout=self.timeout)
             if not isinstance(info, dict):
                 raise ValueError("yt-dlp returned non-object metadata")
             extracted = classify_extraction(info, url)
             if extracted.entries:
+                logger.info(
+                    "[EXTRACT] source_type=%s entries=%s elapsed=%.2fs",
+                    extracted.media_type.value,
+                    len(extracted.entries),
+                    time.perf_counter() - started,
+                )
                 return extracted
         except Exception as primary_error:
             logger.warning("yt-dlp extraction failed; trying official Instagram embed metadata: %s", primary_error)
-        return await self._extract_from_official_page(url)
+        extracted = await self._extract_from_official_page(url)
+        logger.info(
+            "[EXTRACT] fallback source_type=%s entries=%s elapsed=%.2fs",
+            extracted.media_type.value,
+            len(extracted.entries),
+            time.perf_counter() - started,
+        )
+        return extracted
 
     @staticmethod
     def _decode_embedded_url(value: str) -> str:
@@ -117,6 +132,14 @@ class InstagramExtractor:
             async with httpx.AsyncClient(follow_redirects=True, timeout=self.timeout) as client:
                 response = await client.get(embed_url, headers=headers)
                 response.raise_for_status()
+                try:
+                    return self._parse_official_page(response.text, source_url)
+                except ValueError:
+                    # Some public photo posts expose only standard Open Graph
+                    # metadata on the normal page, not the embed payload.
+                    page_url = f"https://www.instagram.com/{path_prefix}/{shortcode}/?output=1"
+                    response = await client.get(page_url, headers=headers)
+                    response.raise_for_status()
         except httpx.HTTPError as exc:
             raise ValueError("official Instagram metadata request failed") from exc
         return self._parse_official_page(response.text, source_url)

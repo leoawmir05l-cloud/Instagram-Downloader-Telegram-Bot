@@ -1,0 +1,326 @@
+IMPORTANT: THESE ARE NEW REAL-WORLD FAILURES.
+
+Fix ONLY the problems described below.
+
+DO NOT modify, refactor, replace, or optimize any existing media path that is already working.
+
+The currently working Instagram downloads MUST remain byte-for-byte behaviorally equivalent from the user’s perspective.
+
+Do not trade existing reliability for these fixes.
+
+============================================================
+
+1. NEW REAL REEL FAILURE
+    ============================================================
+
+Test this exact URL:
+
+https://www.instagram.com/reel/Dbh58Z8ACxW/?igsi=M2NlY2o1bnl2dW9q
+
+This Reel currently does NOT download correctly.
+
+Reproduce this exact URL and inspect the actual extraction result and failure.
+
+Find the ROOT CAUSE.
+
+Do not create a URL-specific hardcoded exception.
+
+Fix the general class of Reel/extraction failure that this URL represents.
+
+============================================================
+2. NEW REAL INSTAGRAM POST FAILURE
+
+Test this exact URL:
+
+https://www.instagram.com/p/DcyQdT2s5nv/?igsi=ZG1qdWd5eWJrNXNi
+
+This Instagram Post currently does NOT download correctly.
+
+Reproduce the exact URL.
+
+Determine whether it is:
+
+* Photo
+* Video
+* Carousel
+* another supported Instagram media structure
+
+Then route it through the correct existing media pipeline.
+
+DO NOT assume every /p/ URL is a Photo.
+
+DO NOT assume every /p/ URL is a Video.
+
+DO NOT create a special-case for this post ID.
+
+Fix the general extraction/classification problem responsible for this type of post.
+
+============================================================
+3. VERY IMPORTANT — DO NOT BREAK WORKING DOWNLOADS
+
+Before making changes:
+
+identify which media paths currently work.
+
+Treat them as regression-sensitive.
+
+Do NOT change:
+
+* working Photo downloads
+* working Video downloads
+* working Reel downloads
+* working Carousel downloads
+* working mixed Carousel downloads
+* working Telegram sending
+* working reply-to-original behavior
+* working captions
+* working Add-to-Group buttons
+* working Required Channel system
+* working statistics
+* working Admin Panel
+* working Reply Keyboard
+* working Inline buttons
+
+unless a change is absolutely required to fix the specific failures above.
+
+If a shared function must be changed, preserve its existing behavior for all previously working cases.
+
+============================================================
+4. DOWNLOAD SPEED — CRITICAL
+
+The current download speed is VERY SLOW.
+
+Improve download performance without reducing media quality.
+
+DO NOT simply lower quality to make downloads faster.
+
+DO NOT select a lower-quality format just because it downloads faster.
+
+Investigate the actual bottleneck first.
+
+Measure:
+
+* extraction time
+* time to obtain media URL
+* download throughput
+* FFmpeg processing time
+* Telegram upload time
+
+Determine whether the slowdown is caused by:
+
+* yt-dlp configuration
+* excessive retries
+* artificial rate limiting
+* HTTP connection setup
+* single-threaded downloading
+* unnecessary format merging
+* unnecessary transcoding
+* slow fallback implementation
+* repeated metadata extraction
+* downloading the same resource more than once
+
+============================================================
+5. SAFE SPEED OPTIMIZATION
+
+Optimize ONLY where safe.
+
+Prefer:
+
+* connection reuse
+* appropriate HTTP settings
+* efficient yt-dlp configuration
+* parallel download of independent Carousel items where it does NOT alter output order
+* avoiding duplicate downloads
+* avoiding unnecessary FFmpeg conversion
+* avoiding repeated Instagram extraction
+* efficient temporary file handling
+
+Do NOT:
+
+* reduce resolution
+* reduce bitrate
+* reduce audio quality
+* select deliberately inferior formats
+* remove audio
+* remove video streams
+* skip validation
+* skip required media
+* break Carousel ordering
+
+============================================================
+6. DO NOT DOWNLOAD THE SAME MEDIA TWICE
+
+Check the pipeline carefully.
+
+A common performance mistake is:
+
+download media
+→ create converted copy
+→ download same media again
+→ send
+
+Avoid duplicate network downloads.
+
+For a valid already-compatible video:
+
+download once
+→ validate
+→ send
+
+For a photo:
+
+download once
+→ validate
+→ send Photo
+→ send the SAME original file as Document
+
+Do not download the image twice.
+
+============================================================
+7. VIDEO TRANSCODING
+
+Do NOT transcode videos unnecessarily.
+
+If the downloaded video is already Telegram-compatible:
+
+remux if needed, otherwise send directly.
+
+Only transcode if:
+
+* codec incompatible
+* container incompatible
+* timestamps broken
+* frames invalid
+* Telegram compatibility genuinely requires conversion
+
+This is important for download speed.
+
+============================================================
+8. CAROUSEL PERFORMANCE
+
+For Carousel:
+
+downloads may be performed concurrently where safe.
+
+BUT:
+
+Telegram output order MUST remain exactly the same as Instagram order.
+
+For example:
+
+Download concurrently:
+
+0, 1, 2, 3
+
+but send:
+
+0
+1
+2
+3
+
+in exact order.
+
+Do not let concurrency change output ordering.
+
+Do not introduce race conditions.
+
+============================================================
+9. PERFORMANCE LOGGING
+
+Add useful timing logs during debugging:
+
+[EXTRACT] …
+[DOWNLOAD] …
+[FFMPEG] …
+[FFPROBE] …
+[TELEGRAM_UPLOAD] …
+
+Include elapsed time and throughput where possible.
+
+Never log:
+
+BOT_TOKEN
+ADMIN_ID
+cookies
+private credentials
+secrets
+
+After finding the bottleneck, keep useful performance logging at an appropriate level.
+
+============================================================
+10. TEST THE TWO EXACT URLs
+
+After fixing, explicitly test:
+
+REEL:
+https://www.instagram.com/reel/Dbh58Z8ACxW/?igsi=M2NlY2o1bnl2dW9q
+
+POST:
+https://www.instagram.com/p/DcyQdT2s5nv/?igsi=ZG1qdWd5eWJrNXNi
+
+Verify:
+
+URL detection
+→ extraction
+→ correct media classification
+→ download
+→ validation
+→ Telegram send
+→ caption
+→ reply to original message
+
+============================================================
+11. REGRESSION TESTS
+
+Before declaring completion, run regression tests for the existing working functionality.
+
+At minimum verify:
+
+* existing Photo path
+* existing Video path
+* existing Reel path
+* existing Carousel path
+* existing mixed Carousel path
+* URL extraction
+* Group auto-download
+* Private Chat
+* reply-to-original
+* Downloaded-by caption
+* Add-to-Group button
+* Required Channels
+* Statistics
+* Admin authorization
+* Inline buttons
+* Reply Keyboard
+
+Do not rewrite working code just for code style.
+
+============================================================
+12. ACCEPTANCE CRITERIA
+
+The task is complete only when:
+
+✅ Reel Dbh58Z8ACxW works
+✅ Post DcyQdT2s5nv works
+✅ Root cause is fixed generally, not URL-hardcoded
+✅ Download speed is improved where technically possible
+✅ Media quality is NOT reduced
+✅ Audio quality is NOT reduced
+✅ Existing working downloads are NOT changed/broken
+✅ No duplicate media downloads occur
+✅ Unnecessary transcoding is avoided
+✅ Carousel order remains exact
+✅ All existing features continue to work
+
+IMPORTANT:
+
+DO NOT optimize or refactor unrelated working code.
+
+The priority is:
+
+1. Fix the two exact real-world failures.
+2. Improve download speed safely.
+3. Preserve EVERYTHING that already works.
+
+Before reporting completion, actually run the available tests and clearly state what was tested and what could not be tested.
