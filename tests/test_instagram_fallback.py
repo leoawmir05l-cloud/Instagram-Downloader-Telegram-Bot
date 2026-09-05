@@ -23,3 +23,17 @@ def test_official_page_metadata_uses_og_image_when_embed_has_no_entries():
     result = InstagramExtractor()._parse_official_page(page, "https://www.instagram.com/p/example/")
     assert result.media_type is MediaType.PHOTO
     assert source_image_url(result.entries[0]) == "https://cdn.example/image?id=1&size=large"
+
+
+def test_normal_post_page_open_graph_image_is_a_photo():
+    page = '''
+    <html><head>
+      <meta property="og:image" content="https://cdn.example/post-image?id=42&amp;size=640" />
+    </head></html>
+    '''
+    result = InstagramExtractor()._parse_official_page(
+        page,
+        "https://www.instagram.com/p/DcyQdT2s5nv/",
+    )
+    assert result.media_type is MediaType.PHOTO
+    assert source_image_url(result.entries[0]) == "https://cdn.example/post-image?id=42&size=640"

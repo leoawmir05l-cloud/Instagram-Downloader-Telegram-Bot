@@ -244,6 +244,7 @@ async def send_bundle(message: Any, bundle: DownloadBundle, downloader: MediaDow
             video_stream = next(stream for stream in metadata["streams"] if stream.get("codec_type") == "video")
             duration = float((metadata.get("format") or {}).get("duration") or 0)
             thumbnail = await _thumbnail(item.path, bundle.job_directory)
+            upload_started = asyncio.get_running_loop().time()
             with item.path.open("rb") as video:
                 video_markup = InlineKeyboardMarkup(
                     [[InlineKeyboardButton("➕ افزودن به گروه", url=f"https://t.me/{settings.bot_username}?startgroup=true")]]
@@ -275,8 +276,8 @@ async def send_bundle(message: Any, bundle: DownloadBundle, downloader: MediaDow
                     )
                 sent_media = getattr(sent_video, "video", None)
                 logger.info(
-                    "Telegram video delivered message_id=%s file_id=%s mime_type=%s "
-                    "width=%s height=%s duration=%s thumbnail=%s cover=%s",
+                    "[TELEGRAM_UPLOAD] message_id=%s file_id=%s mime_type=%s "
+                    "width=%s height=%s duration=%s thumbnail=%s cover=%s elapsed=%.2fs bytes=%s",
                     getattr(sent_video, "message_id", None),
                     getattr(sent_media, "file_id", None),
                     getattr(sent_media, "mime_type", None),
@@ -285,6 +286,8 @@ async def send_bundle(message: Any, bundle: DownloadBundle, downloader: MediaDow
                     getattr(sent_media, "duration", None),
                     bool(getattr(sent_media, "thumbnail", None)),
                     bool(getattr(sent_media, "cover", None)),
+                    asyncio.get_running_loop().time() - upload_started,
+                    item.path.stat().st_size,
                 )
 
 

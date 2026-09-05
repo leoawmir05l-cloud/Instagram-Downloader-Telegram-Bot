@@ -6,6 +6,7 @@ from PIL import Image
 from telegram_bot.downloader import (
     DownloadError,
     MediaDownloader,
+    TELEGRAM_MAX_UPLOAD_BYTES,
     ensure_telegram_video,
     probe_video,
     validate_image,
@@ -91,3 +92,7 @@ def test_telegram_photo_copy_preserves_readable_image(tmp_path):
     downloader = MediaDownloader(tmp_path / "jobs")
     copy = downloader.make_telegram_photo_copy(source, tmp_path)
     validate_image(copy)
+
+
+def test_telegram_video_upload_budget_is_below_cloud_limit():
+    assert TELEGRAM_MAX_UPLOAD_BYTES < 50_000_000
