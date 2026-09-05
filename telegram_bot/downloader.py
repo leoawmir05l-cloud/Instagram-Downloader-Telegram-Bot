@@ -40,7 +40,7 @@ def validate_image(path: Path) -> None:
         raise DownloadError("corrupted_media", "image could not be decoded") from exc
 
 
-def probe_video(path: Path) -> dict[str, Any]:
+def probe_video(path: Path, *, count_frames: bool = False) -> dict[str, Any]:
     if not path.is_file() or path.stat().st_size <= 0:
         raise DownloadError("corrupted_media", "video file is empty or missing")
     command = [
@@ -49,11 +49,12 @@ def probe_video(path: Path) -> dict[str, Any]:
         "error",
         "-show_streams",
         "-show_format",
-        "-count_frames",
         "-of",
         "json",
         str(path),
     ]
+    if count_frames:
+        command.insert(command.index("-of"), "-count_frames")
     started = time.perf_counter()
     result = subprocess.run(command, capture_output=True, text=True, timeout=30)
     if result.returncode != 0:
@@ -139,7 +140,6 @@ def _is_telegram_compatible(metadata: dict[str, Any]) -> bool:
         and video.get("codec_name") == "h264"
         and str(video.get("pix_fmt") or "").startswith(("yuv420", "yuvj420"))
         and (audio is None or audio.get("codec_name") == "aac")
-        and int(video.get("nb_read_frames") or video.get("nb_frames") or 0) > 0
     )
 
 

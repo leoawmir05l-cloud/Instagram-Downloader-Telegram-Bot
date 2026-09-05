@@ -1,0 +1,336 @@
+NEW TARGETED FIX — DO NOT TOUCH ANYTHING ELSE.
+
+The bot is currently working correctly for the other previously tested features.
+
+I only want TWO things changed:
+
+1. Fix the zoomed/cropped Photo output for this exact Instagram Post.
+2. Improve Video/Reel download speed without reducing quality.
+
+DO NOT modify any other functionality.
+
+============================================================
+
+1. PHOTO IS INCORRECTLY ZOOMED / CROPPED
+    ============================================================
+
+Exact URL:
+
+https://www.instagram.com/p/DcyQdT2s5nv/?igsi=ZG1qdWd5eWJrNXNi
+
+This URL now downloads successfully, BUT the resulting Telegram Photo appears ZOOMED/CROPPED compared with the original Instagram image.
+
+This is NOT acceptable.
+
+Find the root cause.
+
+The bot must download the ACTUAL ORIGINAL IMAGE, not:
+
+* a cropped image
+* a resized image
+* a thumbnail
+* a preview
+* a cover
+* an Open Graph image if it is lower-resolution/cropped
+* a Telegram-generated thumbnail
+
+IMPORTANT:
+
+Do not fix this by simply changing Telegram’s display parameters.
+
+Fix the SOURCE IMAGE selection.
+
+Inspect the available Instagram metadata and identify the highest-quality/full-frame image belonging to the post.
+
+Compare:
+
+* source image dimensions
+* downloaded image dimensions
+* Telegram Photo dimensions
+
+The downloaded original must preserve the complete image frame and aspect ratio.
+
+DO NOT crop.
+
+DO NOT zoom.
+
+DO NOT resize.
+
+DO NOT recompress the original.
+
+If Telegram’s send_photo automatically processes the image, continue sending the ORIGINAL file separately as Document so the user receives the untouched original-quality image.
+
+However, the Photo itself should also use the correct full-frame source whenever Telegram accepts it.
+
+DO NOT hardcode this specific post ID.
+
+Fix the general source-selection logic responsible for this type of incorrect/cropped Instagram image.
+
+============================================================
+2. VIDEO / REEL DOWNLOAD SPEED IS STILL VERY SLOW
+
+Current Video/Reel downloads are STILL extremely slow.
+
+Improve the speed substantially.
+
+IMPORTANT:
+
+Do NOT reduce media quality.
+
+Do NOT select a lower-quality Instagram format.
+
+Do NOT lower:
+
+* resolution
+* bitrate
+* FPS
+* audio quality
+
+Do NOT remove audio.
+
+Do NOT skip validation.
+
+First measure where the time is actually being spent:
+
+[EXTRACT]
+[DOWNLOAD]
+[FFMPEG]
+[FFPROBE]
+[TELEGRAM_UPLOAD]
+
+Determine the actual bottleneck.
+
+============================================================
+3. AVOID UNNECESSARY TRANSCODING
+
+This is the highest-priority performance investigation.
+
+Before running FFmpeg conversion:
+
+inspect the downloaded file with FFprobe.
+
+If the source is already compatible with Telegram:
+
+DO NOT transcode it.
+
+Prefer:
+
+download
+→ validate
+→ remux only if necessary
+→ send
+
+instead of:
+
+download
+→ full re-encode
+→ send
+
+A full video re-encode can be extremely slow and is NOT acceptable when it is unnecessary.
+
+Only transcode if genuinely required because of:
+
+* incompatible codec
+* incompatible container
+* broken timestamps
+* invalid frames
+* Telegram compatibility
+
+============================================================
+4. OPTIMIZE REQUIRED CONVERSION
+
+If conversion is genuinely required:
+
+use the fastest safe encoder configuration that preserves acceptable source quality.
+
+Do not blindly use a slow CPU preset.
+
+Do not unnecessarily increase bitrate.
+
+Do not create a huge output file.
+
+Maintain the previously fixed safe Telegram upload-size handling.
+
+The existing successful 45.4 MB Reel output behavior must remain valid.
+
+============================================================
+5. DO NOT DOWNLOAD MEDIA TWICE
+
+Ensure the pipeline does not download the same video more than once.
+
+Avoid:
+
+download video
+→ download same video again
+→ convert
+→ send
+
+Download once.
+
+Use the resulting local file throughout the pipeline.
+
+============================================================
+6. DO NOT RE-EXTRACT INSTAGRAM MULTIPLE TIMES
+
+Avoid repeated metadata extraction for the same URL.
+
+One extraction should provide the media information needed for the download.
+
+Do not repeatedly call yt-dlp for:
+
+* format discovery
+* thumbnail discovery
+* video download
+
+unless technically unavoidable.
+
+============================================================
+7. CONNECTION / DOWNLOAD PERFORMANCE
+
+Measure actual network throughput.
+
+If yt-dlp is the bottleneck, optimize its configuration safely.
+
+If the media URL supports efficient HTTP downloading, use appropriate connection settings.
+
+Do not introduce artificial rate limits.
+
+Do not add unnecessary sleeps.
+
+Do not retry successful requests.
+
+Do not use excessive retry delays.
+
+============================================================
+8. TELEGRAM UPLOAD
+
+Measure Telegram upload separately.
+
+Do not confuse:
+
+download speed
+
+with:
+
+Telegram upload speed.
+
+If the Instagram download itself is fast but Telegram upload is slow, report that clearly instead of changing the downloader unnecessarily.
+
+============================================================
+9. QUALITY PRESERVATION
+
+The speed optimization must NOT:
+
+* select lower resolution
+* lower audio bitrate
+* lower video bitrate unnecessarily
+* remove high-quality audio
+* downgrade FPS
+* crop video
+* change aspect ratio
+
+The goal is:
+
+SAME QUALITY + FASTER PIPELINE.
+
+============================================================
+10. REGRESSION PROTECTION
+
+DO NOT MODIFY:
+
+* working Photo extraction
+* working Carousel
+* working Reel extraction logic
+* working video validation
+* working reply-to-original
+* working captions
+* Add-to-Group button
+* Required Channels
+* Admin Panel
+* Statistics
+* /start
+* Inline buttons
+* Reply Keyboard
+* Group auto-download
+* Private Chat
+* SQLite
+* Ban/Unban
+* Broadcast
+
+unless absolutely required by the two requested fixes.
+
+This is a TARGETED CHANGE.
+
+============================================================
+11. TEST THE EXACT PHOTO
+
+After the fix, test:
+
+https://www.instagram.com/p/DcyQdT2s5nv/?igsi=ZG1qdWd5eWJrNXNi
+
+Verify:
+
+* full image frame
+* correct aspect ratio
+* correct dimensions
+* no zoom
+* no crop
+* no thumbnail/preview substitution
+* original file remains untouched
+
+============================================================
+12. VIDEO SPEED TEST
+
+Use the previously tested Reel:
+
+https://www.instagram.com/reel/Dbh58Z8ACxW/?igsi=M2NlY2o1bnl2dW9q
+
+Measure:
+
+EXTRACT time
+DOWNLOAD time
+FFMPEG time
+FFPROBE time
+TOTAL preprocessing time
+TELEGRAM upload time if possible
+
+Compare with the previous approximately 72-second processing time.
+
+The goal is to reduce unnecessary processing substantially.
+
+============================================================
+13. FINAL ACCEPTANCE CRITERIA
+
+Complete this task ONLY when:
+
+PHOTO:
+
+✅ DcyQdT2s5nv downloads
+✅ Full image is visible
+✅ No zoom
+✅ No crop
+✅ Correct aspect ratio
+✅ Original-quality Document remains untouched
+
+VIDEO:
+
+✅ Reel still downloads
+✅ Video remains playable
+✅ Audio remains synchronized
+✅ Resolution remains correct
+✅ Audio quality is not deliberately reduced
+✅ Telegram upload-size protection remains
+✅ Download/processing is measurably faster
+✅ No unnecessary full transcoding
+✅ No duplicate downloads
+
+AND:
+
+✅ No other bot functionality is changed.
+
+Before reporting completion, run the relevant regression tests and clearly report exactly what changed and what remained untouched.
+
+DO NOT perform unrelated refactoring.
+DO NOT redesign the bot.
+DO NOT modify working features.
+ONLY FIX THE PHOTO SOURCE/CROP ISSUE AND VIDEO/REEL PERFORMANCE.

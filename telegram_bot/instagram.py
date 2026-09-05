@@ -23,6 +23,7 @@ OG_IMAGE_RE = re.compile(
     r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)',
     re.IGNORECASE,
 )
+IMAGE_ATTRIBUTE_RE = re.compile(r'(?:srcset|src)=["\']([^"\']+)["\']', re.IGNORECASE)
 
 
 class InstagramExtractor:
@@ -95,6 +96,8 @@ class InstagramExtractor:
                 }
             )
         if not media:
+            media = self._parse_full_frame_image_sources(page, source_url)
+        if not media:
             match = OG_IMAGE_RE.search(page)
             if match:
                 media_url = html.unescape(match.group(1)).replace("&amp;", "&")
@@ -114,6 +117,60 @@ class InstagramExtractor:
             entries=media,
             is_reel="/reel/" in source_url or "/reels/" in source_url,
         )
+
+    @classmethod
+    def _parse_full_frame_image_sources(cls, page: str, source_url: str) -> list[dict[str, Any]]:
+        grouped: dict[str, list[str]] = {}
+        order: list[str] = []
+        for attribute in IMAGE_ATTRIBUTE_RE.findall(page):
+            for token in attribute.split(","):
+                raw_url = token.strip().split(" ", 1)[0]
+                media_url = cls._decode_embedded_url(raw_url)
+                if not media_url.startswith(("https://", "http://")):
+                    continue
+                parsed = urlsplit(media_url)
+                filename = parsed.path.rsplit("/", 1)[-1]
+                if not filename.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+                    continue
+                if filename not in grouped:
+                    grouped[filename] = []
+                    order.append(filename)
+                if media_url not in grouped[filename]:
+                    grouped[filename].append(media_url)
+
+        def source_score(media_url: str) -> tuple[int, int]:
+            query = urlsplit(media_url).query
+            stp = query.split("&", 1)[0].removeprefix("stp=")
+            # An untransformed dst-jpg source is preferred over p/s resized
+            # variants and c cropped variants. The dimensions are preserved.
+            if "dst-jpg" in stp and not re.search(r"(?:^|_)(?:p|s|c)\d", stp):
+                return (3, 0)
+            sizes = re.findall(r"(?:p|s)(\d+)x(\d+)", stp)
+            largest = max((int(width) * int(height) for width, height in sizes), default=0)
+            if "c" in stp:
+                return (1, largest)
+            return (2, largest)
+
+        selected: list[dict[str, Any]] = []
+        for filename in order:
+            candidates = grouped[filename]
+            best = max(candidates, key=source_score)
+            # Profile/avatar resources have only tiny single-size variants;
+            # post media normally has a source plus a responsive srcset.
+            if len(candidates) == 1 and source_score(best)[1] and source_score(best)[1] <= 100 * 100:
+                continue
+            selected.append(
+                {
+                    "url": best,
+                    "ext": "jpg",
+                    "webpage_url": source_url,
+                    "original_url": source_url,
+                }
+            )
+        # When the embed does not expose structured media entries, its first
+        # responsive image group is the post media; later groups are often
+        # recommendation/profile images from the embed page.
+        return selected[:1]
 
     async def _extract_from_official_page(self, source_url: str) -> ExtractedMedia:
         match = SHORTCODE_RE.search(urlsplit(source_url).path)
